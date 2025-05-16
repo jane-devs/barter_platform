@@ -1,115 +1,145 @@
-from rest_framework import viewsets, permissions, filters
+from django.views.generic import CreateView, UpdateView, DeleteView, ListView, FormView, View
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse_lazy
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth import login
+from django.contrib import messages
+from django.http import HttpResponseBadRequest
 from .models import Ad, ExchangeProposal
-from .serializers import AdSerializer, ExchangeProposalSerializer
-from .permissions import IsOwner
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
 from .forms import AdForm, ExchangeProposalForm
+from django.db.models import Q
+from .mixins import AdsFilterMixin, IsOwnerMixin
 
 
-class AdViewSet(viewsets.ModelViewSet):
-    queryset = Ad.objects.all().order_by('-created_at')
-    serializer_class = AdSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['title', 'description']
+class AdListView(LoginRequiredMixin, AdsFilterMixin, ListView):
+    model = Ad
+    template_name = 'ads/ad_list.html'
+    context_object_name = 'ads'
+    paginate_by = 10
+    ordering = ['-created_at']
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        return self.filter_ads_queryset(queryset).order_by('-created_at')
 
-    def get_permissions(self):
-        if self.action in ['update', 'partial_update', 'destroy']:
-            return [permissions.IsAuthenticated(), IsOwner()]
-        return super().get_permissions()
-
-
-class ExchangeProposalViewSet(viewsets.ModelViewSet):
-    queryset = ExchangeProposal.objects.all().order_by('-created_at')
-    serializer_class = ExchangeProposalSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def perform_create(self, serializer):
-        serializer.save()
-
-    @action(detail=False)
-    def filter(self, request):
-        sender = request.query_params.get('ad_sender')
-        receiver = request.query_params.get('ad_receiver')
-        status = request.query_params.get('status')
-        proposals = self.queryset
-
-        if sender:
-            proposals = proposals.filter(ad_sender__id=sender)
-        if receiver:
-            proposals = proposals.filter(ad_receiver__id=receiver)
-        if status:
-            proposals = proposals.filter(status=status)
-
-        page = self.paginate_queryset(proposals)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(proposals, many=True)
-        return Response(serializer.data)
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user_ads = Ad.objects.filter(user=self.request.user)
+        context['proposed_ads_ids'] = set(
+            ExchangeProposal.objects.filter(ad_sender__in=user_ads, status='pending')
+            .values_list('ad_receiver_id', flat=True)
+        )
+        context['exchanged_ads_ids'] = set(
+            Ad.objects.filter(is_exchanged=True).values_list('id', flat=True)
+        )
+        context['search_query'] = self.get_search_param()
+        context['filter_category'] = self.get_category_param()
+        context['filter_condition'] = self.get_condition_param()
+        return context
 
 
-@login_required
-def create_ad(request):
-    if request.method == 'POST':
-        form = AdForm(request.POST)
-        if form.is_valid():
-            ad = form.save(commit=False)
-            ad.user = request.user
-            ad.save()
+class AdCreateView(LoginRequiredMixin, CreateView):
+    model = Ad
+    form_class = AdForm
+    template_name = 'ads/ad_form.html'
+    success_url = reverse_lazy('ad_list')
+
+    def form_valid(self, form):
+        form.instance.user = self.request.user
+        return super().form_valid(form)
+
+
+class AdUpdateView(LoginRequiredMixin, UserPassesTestMixin, IsOwnerMixin, UpdateView):
+    model = Ad
+    form_class = AdForm
+    template_name = 'ads/ad_form.html'
+    success_url = reverse_lazy('ad_list')
+
+    def test_func(self):
+        ad = self.get_object()
+        return self.is_owner(ad)
+
+
+class AdDeleteView(LoginRequiredMixin, UserPassesTestMixin, IsOwnerMixin, DeleteView):
+    model = Ad
+    template_name = 'ads/ad_confirm_delete.html'
+    success_url = reverse_lazy('ad_list')
+
+    def test_func(self):
+        ad = self.get_object()
+        return self.is_owner(ad)
+
+
+class ProposalCreateView(LoginRequiredMixin, FormView):
+    template_name = 'ads/proposal_form.html'
+    form_class = ExchangeProposalForm
+    success_url = reverse_lazy('ad_list')
+
+    def dispatch(self, request, *args, **kwargs):
+        self.ad_receiver = get_object_or_404(Ad, pk=self.kwargs['ad_pk'], is_exchanged=False)
+        if self.ad_receiver.user == request.user:
+            messages.error(request, "Вы не можете предлагать обмен самому себе.")
             return redirect('ad_list')
-    else:
-        form = AdForm()
-    return render(request, 'ads/ad_form.html', {'form': form})
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        kwargs['ad_receiver'] = self.ad_receiver
+        return kwargs
+
+    def form_valid(self, form):
+        proposal = form.save(commit=False)
+        proposal.ad_receiver = self.ad_receiver
+        proposal.status = 'pending'
+        proposal.save()
+        messages.success(self.request, "Предложение обмена отправлено.")
+        return super().form_valid(form)
 
 
-@login_required
-def update_ad(request, pk):
-    ad = get_object_or_404(Ad, pk=pk, user=request.user)
-    if request.method == 'POST':
-        form = AdForm(request.POST, instance=ad)
-        if form.is_valid():
-            form.save()
-            return redirect('ad_list')
-    else:
-        form = AdForm(instance=ad)
-    return render(request, 'ads/ad_form.html', {'form': form})
+class MyProposalsView(LoginRequiredMixin, View):
+    def get(self, request):
+        user_ads = Ad.objects.filter(user=request.user)
+        sent_proposals = ExchangeProposal.objects.filter(ad_sender__in=user_ads)
+        received_proposals = ExchangeProposal.objects.filter(ad_receiver__in=user_ads)
+        return render(request, 'ads/my_proposals.html', {
+            'sent_proposals': sent_proposals,
+            'received_proposals': received_proposals,
+        })
 
 
-@login_required
-def delete_ad(request, pk):
-    ad = get_object_or_404(Ad, pk=pk, user=request.user)
-    if request.method == 'POST':
-        ad.delete()
-        return redirect('ad_list')
-    return render(request, 'ads/ad_confirm_delete.html', {'ad': ad})
+class HandleProposalView(LoginRequiredMixin, View):
+    def post(self, request, proposal_id, action):
+        proposal = get_object_or_404(ExchangeProposal, pk=proposal_id, ad_receiver__user=request.user)
+
+        if proposal.status != 'pending':
+            messages.info(request, "Это предложение уже обработано.")
+            return redirect('my_proposals')
+
+        if action == 'accept':
+            proposal.status = 'accepted'
+            proposal.ad_sender.is_exchanged = True
+            proposal.ad_receiver.is_exchanged = True
+            proposal.ad_sender.save()
+            proposal.ad_receiver.save()
+            messages.success(request, "Вы приняли предложение обмена.")
+        elif action == 'reject':
+            proposal.status = 'rejected'
+            messages.success(request, "Вы отклонили предложение обмена.")
+        else:
+            return HttpResponseBadRequest("Неверное действие.")
+        
+        proposal.save()
+        return redirect('my_proposals')
 
 
-def ad_list(request):
-    ads = Ad.objects.all().order_by('-created_at')
-    return render(request, 'ads/ad_list.html', {'ads': ads})
+class RegisterView(FormView):
+    template_name = 'registration/register.html'
+    form_class = UserCreationForm
+    success_url = reverse_lazy('ad_list')
 
-
-@login_required
-def create_proposal(request):
-    if request.method == 'POST':
-        form = ExchangeProposalForm(request.POST)
-        if form.is_valid():
-            proposal = form.save(commit=False)
-            proposal.status = 'pending'
-            proposal.save()
-            return redirect('ad_list')
-    else:
-        form = ExchangeProposalForm()
-    return render(request, 'ads/proposal_form.html', {'form': form})
-
-
-def redirect_to_ads(request):
-    return redirect('ad_list')
+    def form_valid(self, form):
+        user = form.save()
+        login(self.request, user)
+        return super().form_valid(form)

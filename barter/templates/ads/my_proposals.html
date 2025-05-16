@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2 class="mb-4">Мои обмены</h2>
+
+<h3 class="mt-4">Отправленные предложения</h3>
+<ul class="list-group mb-4">
+  {% for prop in sent_proposals %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <div>
+        <strong>Ваше объявление:</strong> {{ prop.ad_sender.title }} →
+        <strong>Объявление:</strong> {{ prop.ad_receiver.title }}
+      </div>
+      <span class="badge
+        {% if prop.status == 'pending' %}bg-warning text-dark
+        {% elif prop.status == 'rejected' %}bg-danger
+        {% elif prop.status == 'accepted' %}bg-success
+        {% else %}bg-secondary
+        {% endif %}"
+        style="font-size: 1.1rem; padding: 0.5em 0.8em;">
+        {{ prop.get_status_display }}
+      </span>
+    </li>
+  {% empty %}
+    <li class="list-group-item">Нет отправленных предложений.</li>
+  {% endfor %}
+</ul>
+
+<h3 class="mt-4">Входящие предложения</h3>
+<ul class="list-group">
+  {% for prop in received_proposals %}
+    <li class="list-group-item">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <strong>Объявление:</strong> {{ prop.ad_sender.title }} →
+          <strong>Ваше объявление:</strong> {{ prop.ad_receiver.title }}
+        </div>
+        <div>
+          <span class="badge
+            {% if prop.status == 'pending' %}bg-warning text-dark
+            {% elif prop.status == 'rejected' %}bg-danger
+            {% elif prop.status == 'accepted' %}bg-success
+            {% else %}bg-secondary
+            {% endif %}"
+            style="font-size: 1.1rem; padding: 0.5em 0.8em;">
+            {{ prop.get_status_display }}
+          </span>
+          {% if prop.status == 'pending' %}
+            <form method="post" action="{% url 'handle_proposal' prop.id 'accept' %}" style="display:inline;">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-success me-1">Принять</button>
+            </form>
+            <form method="post" action="{% url 'handle_proposal' prop.id 'reject' %}" style="display:inline;">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-danger">Отклонить</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    </li>
+  {% empty %}
+    <li class="list-group-item">Нет входящих предложений.</li>
+  {% endfor %}
+</ul>
+{% endblock %}

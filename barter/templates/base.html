@@ -8,26 +8,23 @@
 </head>
 <body>
 
-<!-- Навигационная панель -->
-<nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="{% url 'ad_list' %}">Бартер</a>
+{% include 'includes/header.html' %}
 
-        <div class="d-flex ms-auto align-items-center">
-            {% if user.is_authenticated %}
-                <span class="me-3 text-muted">Привет, {{ user.username }}!</span>
-                <a href="{% url 'logout' %}" class="btn btn-outline-danger">Выйти</a>
-            {% else %}
-                <a href="{% url 'login' %}" class="btn btn-outline-primary">Войти</a>
-            {% endif %}
-        </div>
-    </div>
-</nav>
+{% if messages %}
+  <div class="container mt-3">
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }}">
+        {{ message }}
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
 
-<!-- Основной контейнер -->
 <div class="container mt-4">
     {% block content %}{% endblock %}
 </div>
+
+{% include 'includes/footer.html' %}
 
 </body>
 </html>

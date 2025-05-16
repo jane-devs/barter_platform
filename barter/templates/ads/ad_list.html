@@ -3,20 +3,49 @@
 
 {% block content %}
 <h1>Объявления</h1>
-<a href="{% url 'ad_create' %}" class="btn btn-primary mb-3">Создать объявление</a>
+
+{% if user.is_authenticated %}
+    <a href="{% url 'ad_create' %}" class="btn btn-primary mb-3">Создать объявление</a>
+{% endif %}
 
 <ul class="list-group">
     {% for ad in ads %}
         <li class="list-group-item">
-            <h5>{{ ad.title }}</h5>
-            <p>{{ ad.description }}</p>
-            <p><strong>Категория:</strong> {{ ad.get_category_display }}</p>
-            <p><strong>Состояние:</strong> {{ ad.get_condition_display }}</p>
-            <a href="{% url 'ad_update' ad.pk %}" class="btn btn-sm btn-warning">Редактировать</a>
-            <form method="post" action="{% url 'ad_delete' ad.pk %}" style="display:inline;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-danger">Удалить</button>
-            </form>
+            <div class="row align-items-center">
+                <div class="col-md-9 col-sm-12">
+                    <h5>{{ ad.title }}</h5>
+                    <p>{{ ad.description }}</p>
+                    <p><strong>Категория:</strong> {{ ad.get_category_display }}</p>
+                    <p><strong>Состояние:</strong> {{ ad.get_condition_display }}</p>
+
+                    {% if user.is_authenticated %}
+                        {% if ad.is_exchanged %}
+                            <button class="btn btn-secondary" disabled>Товар обменян</button>
+
+                        {% elif ad.user == user %}
+                            <a href="{% url 'ad_update' ad.pk %}" class="btn btn-sm btn-warning">Редактировать</a>
+                            <form method="post" action="{% url 'ad_delete' ad.pk %}" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-danger">Удалить</button>
+                            </form>
+
+                        {% elif ad.id in proposed_ads_ids %}
+                            <button class="btn btn-warning" disabled>Ожидает ответа</button>
+
+                        {% elif ad.id in exchanged_ads_ids %}
+                            <button class="btn btn-secondary" disabled>Товар обменян</button>
+
+                        {% else %}
+                            <a href="{% url 'proposal_create' ad.id %}" class="btn btn-primary">Предложить обмен</a>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                {% if ad.image_url %}
+                    <div class="col-md-3 col-sm-12 text-end">
+                        <img src="{{ ad.image_url }}" alt="Фото" class="img-fluid rounded" style="max-width: 200px; max-height: 200px;">
+                    </div>
+                {% endif %}
+            </div>
         </li>
     {% empty %}
         <li class="list-group-item">Объявлений пока нет.</li>

@@ -1,18 +1,19 @@
 from rest_framework import serializers
 from .models import Ad, ExchangeProposal
+from django.contrib.auth.models import User
 
 
 class AdSerializer(serializers.ModelSerializer):
-    user = serializers.StringRelatedField(read_only=True)
-
     class Meta:
         model = Ad
-        fields = '__all__'
-        read_only_fields = ('id', 'created_at', 'user')
-
+        fields = ['id', 'title', 'description', 'category', 'condition', 'user', 'is_exchanged', 'created_at']
 
 class ExchangeProposalSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExchangeProposal
-        fields = '__all__'
-        read_only_fields = ('id', 'created_at', 'status')
+        fields = ['id', 'ad_sender', 'ad_receiver', 'status', 'created_at']
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username']
