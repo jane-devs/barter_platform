@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}Список объявлений{% endblock %}
+
+{% block content %}
+<h1>Объявления</h1>
+<a href="{% url 'ad_create' %}" class="btn btn-primary mb-3">Создать объявление</a>
+
+<ul class="list-group">
+    {% for ad in ads %}
+        <li class="list-group-item">
+            <h5>{{ ad.title }}</h5>
+            <p>{{ ad.description }}</p>
+            <p><strong>Категория:</strong> {{ ad.get_category_display }}</p>
+            <p><strong>Состояние:</strong> {{ ad.get_condition_display }}</p>
+            <a href="{% url 'ad_update' ad.pk %}" class="btn btn-sm btn-warning">Редактировать</a>
+            <form method="post" action="{% url 'ad_delete' ad.pk %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-danger">Удалить</button>
+            </form>
+        </li>
+    {% empty %}
+        <li class="list-group-item">Объявлений пока нет.</li>
+    {% endfor %}
+</ul>
+{% endblock %}
