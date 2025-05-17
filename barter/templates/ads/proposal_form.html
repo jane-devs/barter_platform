@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block content %}
 <h3>Вы предлагаете обмен с объявлением:</h3>
-<p><strong>{{ ad_receiver.title }}</strong></p>
+<p><strong>Товар: {{ ad_receiver.title }}, описание: {{ ad_receiver.description }}</strong></p>
 
 <form method="post">
     {% csrf_token %}

@@ -1,0 +1,47 @@
+<form method="get" class="mb-4 row g-3 align-items-end">
+  <div class="col-md">
+    <input type="text" name="search" class="form-control" placeholder="Поиск..."
+           value="{{ request.GET.search }}">
+  </div>
+  <div class="col-md">
+    <select name="category" class="form-select">
+        <option value="">Все категории</option>
+        {% for key, label in category_choices %}
+            <option value="{{ key }}" {% if key == request.GET.category %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
+  </div>
+  <div class="col-md">
+    <select name="condition" class="form-select">
+        <option value="">Любое состояние</option>
+        {% for key, label in condition_choices %}
+            <option value="{{ key }}" {% if key == request.GET.condition %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
+  </div>
+  <div class="col-md">
+    <select name="order_by" class="form-select">
+      <option value="">Сортировка</option>
+      <option value="title" {% if request.GET.order_by == 'title' %}selected{% endif %}>Название ↑</option>
+      <option value="-title" {% if request.GET.order_by == '-title' %}selected{% endif %}>Название ↓</option>
+      <option value="created_at" {% if request.GET.order_by == 'created_at' %}selected{% endif %}>По дате (от старых)</option>
+    </select>
+  </div>
+
+<div class="col-md-auto d-flex align-items-center">
+  <div class="form-check mb-0">
+    <input class="form-check-input" type="checkbox" name="my_ads" value="1"
+           id="myAdsCheckbox" {% if request.GET.my_ads %}checked{% endif %}>
+    <label class="form-check-label" for="myAdsCheckbox">
+      Только мои
+    </label>
+  </div>
+</div>
+
+  <div class="col-md-auto">
+    <button type="submit" class="btn btn-primary" style="width: 100%;">Применить</button>
+  </div>
+  <div class="col-md-auto">
+    <a href="{% url 'ad_list' %}" class="btn btn-outline-secondary" style="width: 100%;">Сброс</a>
+  </div>
+</form>

@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block content %}
+    <h1>Вам сюда нельзя</h1>
+    <p>Похоже, у вас нет на это прав.</p>
+    <a href="{% url 'ad_list' %}">Вернуться на главную</a>
+{% endblock %}

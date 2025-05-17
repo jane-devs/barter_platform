@@ -2,6 +2,21 @@
 {% block content %}
 <h2 class="mb-4">Мои обмены</h2>
 
+<form method="get" class="row g-3 mb-4">
+  <div class="col-md-3">
+    <select name="status" class="form-select">
+      <option value="">Все статусы</option>
+      <option value="pending" {% if request.GET.status == 'pending' %}selected{% endif %}>Ожидает</option>
+      <option value="accepted" {% if request.GET.status == 'accepted' %}selected{% endif %}>Принято</option>
+      <option value="rejected" {% if request.GET.status == 'rejected' %}selected{% endif %}>Отклонено</option>
+    </select>
+  </div>
+  <div class="col-md-3 d-flex">
+    <button type="submit" class="btn btn-primary me-2">Применить фильтр</button>
+    <a href="{% url 'my_proposals' %}" class="btn btn-outline-secondary">Сбросить</a>
+  </div>
+</form>
+
 <h3 class="mt-4">Отправленные предложения</h3>
 <ul class="list-group mb-4">
   {% for prop in sent_proposals %}
@@ -24,6 +39,7 @@
     <li class="list-group-item">Нет отправленных предложений.</li>
   {% endfor %}
 </ul>
+{% include "includes/proposals_pagination.html" with page_obj=sent_page_obj page_param='sent_page' %}
 
 <h3 class="mt-4">Входящие предложения</h3>
 <ul class="list-group">
@@ -61,4 +77,5 @@
     <li class="list-group-item">Нет входящих предложений.</li>
   {% endfor %}
 </ul>
+{% include "includes/proposals_pagination.html" with page_obj=received_page_obj page_param='received_page' %}
 {% endblock %}
