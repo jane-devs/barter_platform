@@ -1,8 +1,13 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from django.contrib.auth.forms import UsernameField, UserCreationForm
+from django.contrib.auth import get_user_model
 
 from .models import Ad, ExchangeProposal
-from constants import ConstStr, ConstNum
+from constants import ConstStr, ConstNum, Errors
+
+
+User = get_user_model()
 
 
 class AdForm(forms.ModelForm):
@@ -71,7 +76,17 @@ class ExchangeProposalForm(forms.ModelForm):
 
         if ad_sender == self.ad_receiver:
             raise ValidationError(
-                "Объявления отправителя и получателя не могут совпадать.",
+                Errors.SAME_PROPOSAL,
                 code='invalid'
             )
         return cleaned_data
+
+
+class CustomRegisterForm(UserCreationForm):
+    username = UsernameField(widget=forms.TextInput(attrs={'autofocus': True}))
+
+    def clean_username(self):
+        username = self.cleaned_data['username']
+        if User.objects.filter(username=username).exists():
+            raise forms.ValidationError(Errors.USERNAME_TAKEN)
+        return username

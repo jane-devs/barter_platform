@@ -1,5 +1,4 @@
 from django.contrib import messages
-from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.shortcuts import get_object_or_404, redirect
@@ -15,7 +14,11 @@ from .models import Ad, ExchangeProposal
 from .forms import AdForm, ExchangeProposalForm
 from api.mixins import AdsFilterMixin, IsOwnerMixin
 from constants import ConstStr, ConstNum, Message, Errors
-from services.proposal_service import process_proposal_action
+from services.proposal_service import (
+    process_proposal_action, create_exchange_proposal,
+    ProposalCreationError
+)
+from services.registration import register_user, RegistrationError
 
 
 class AdListView(LoginRequiredMixin, AdsFilterMixin, ListView):
@@ -151,10 +154,16 @@ class ProposalCreateView(LoginRequiredMixin, FormView):
         return context
 
     def form_valid(self, form):
-        proposal = form.save(commit=False)
-        proposal.ad_receiver = self.ad_receiver
-        proposal.status = ConstStr.PENDING
-        proposal.save()
+        try:
+            create_exchange_proposal(
+                user=self.request.user,
+                ad_receiver_id=self.ad_receiver.id,
+                ad_sender=form.cleaned_data['ad_sender']
+            )
+        except ProposalCreationError as e:
+            messages.error(self.request, str(e))
+            return redirect('ad_list')
+
         messages.success(self.request, Message.SUCCESS_PROPOSAL_SENT)
         return super().form_valid(form)
 
@@ -245,6 +254,11 @@ class RegisterView(FormView):
     success_url = reverse_lazy('ad_list')
 
     def form_valid(self, form):
-        user = form.save()
-        login(self.request, user)
+        username = form.cleaned_data['username']
+        password = form.cleaned_data['password1']
+        try:
+            register_user(self.request, username, password)
+        except RegistrationError as e:
+            form.add_error(None, str(e))
+            return self.form_invalid(form)
         return super().form_valid(form)

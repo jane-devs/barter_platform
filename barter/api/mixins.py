@@ -1,6 +1,6 @@
 from rest_framework import permissions
 
-from ads.services import filter_ads
+from ads.filters import filter_ads
 
 
 class IsOwnerMixin:

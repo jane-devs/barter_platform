@@ -7,8 +7,6 @@ from rest_framework.permissions import (
 from rest_framework.response import Response
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from django.contrib.auth.models import User
-from django.contrib.auth import login
 from rest_framework_simplejwt.views import (
     TokenObtainPairView, TokenRefreshView
 )
@@ -22,7 +20,11 @@ from .serializers import (
 )
 from .mixins import AdsFilterMixin, IsOwnerPermission
 from constants import ConstStr, Errors, Message
-from services.proposal_service import process_proposal_action
+from services.proposal_service import (
+    process_proposal_action, create_exchange_proposal,
+    ProposalCreationError
+)
+from services.registration import register_user, RegistrationError
 
 
 class AdViewSet(AdsFilterMixin, viewsets.ModelViewSet):
@@ -113,10 +115,16 @@ class ExchangeProposalViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         ad_sender = serializer.validated_data.get('ad_sender')
         if ad_sender.user != self.request.user:
-            raise serializers.ValidationError(
-                Errors.ONLY_YOUR_PROPOSAL
+            raise serializers.ValidationError(Errors.ONLY_YOUR_PROPOSAL)
+
+        try:
+            create_exchange_proposal(
+                user=self.request.user,
+                ad_receiver_id=serializer.validated_data['ad_receiver'].id,
+                ad_sender=ad_sender
             )
-        serializer.save()
+        except ProposalCreationError as e:
+            raise serializers.ValidationError(str(e))
 
     @swagger_auto_schema(
         manual_parameters=[
@@ -228,19 +236,17 @@ class UserViewSet(viewsets.ViewSet):
         """Регистрация пользователя."""
         username = request.data.get('username')
         password = request.data.get('password')
-        if not username or not password:
+        try:
+            register_user(request, username, password)
+        except RegistrationError as e:
             return Response(
-                {'detail': Message.REG_DATA_REQUIRED},
-                status=status.HTTP_400_BAD_REQUEST)
-        if User.objects.filter(username=username).exists():
-            return Response(
-                {'detail': Errors.USERNAME_TAKEN},
-                status=status.HTTP_400_BAD_REQUEST)
-        user = User.objects.create_user(username=username, password=password)
-        login(request, user)
+                {'detail': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         return Response(
             {'detail': Message.REGISTRATION_SUCCESS},
-            status=status.HTTP_201_CREATED)
+            status=status.HTTP_201_CREATED
+        )
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
