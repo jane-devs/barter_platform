@@ -2,10 +2,22 @@ class Message:
     PROPOSAL_ALREADY = 'Предложение уже обработано.'
     PROPOSAL_ACCEPT = 'Предложение принято.'
     PROPOSAL_REJECT = 'Предложение отклонено.'
+    SUCCESS_PROPOSAL_SENT = 'Предложение обмена отправлено.'
+    REG_DATA_REQUIRED = 'Необходимы юзернейм и пароль.'
+    REGISTRATION_SUCCESS = 'Успешная регистрация.'
+    UNKNOWN_ACTION = 'Неизвестное действие'
+    GET_PROPOSAL = 'Вы успешно {get_action} предложение.'
 
 
 class Errors:
-    NO_PERMISSION = 'Нет прав.'
+    NO_PERMISSION = 'Недостаточно прав для выполнения действия.'
+    ERROR_SELF_PROPOSAL = 'Вы не можете предлагать обмен самому себе.'
+    ERROR_PROPOSAL = 'Вы не можете предлагать этот обмен.'
+    WRONG_ACTION = 'Некорректное действие.'
+    ONLY_YOUR_PROPOSAL = (
+        'Вы можете предлагать только свои объявления на обмен.')
+    USERNAME_TAKEN = 'Юзернейм уже занят!'
+    UNKNOWN_RESULT = 'Неизвестный результат.'
 
 
 class ConstNum:
@@ -19,19 +31,13 @@ class ConstStr:
     DESCRIPTION = 'description'
     CATEGORY = 'category'
     CONDITION = 'condition'
-    POST = 'post'
     PENDING = 'pending'
     ACCEPTED = 'accepted'
+    ACCEPTED_RU = 'приняли'
     REJECTED = 'rejected'
+    REJECTED_RU = 'отклонили'
+    PROCESSED = 'обработали'
     DETAIL = 'detail'
     IMAGE_URL = 'image_url'
     AD_SENDER = 'ad_sender'
     COMMENT = 'comment'
-    ERROR_SELF_PROPOSAL = 'Вы не можете предлагать обмен самому себе.'
-    SUCCESS_PROPOSAL_SENT = 'Предложение обмена отправлено.'
-    WRONG_ACTION = 'Некорректное действие.'
-    ONLY_YOUR_PROPOSAL = (
-        'Вы можете предлагать только свои объявления на обмен.')
-    REG_DATA_REQUIRED = 'Необходимы юзернейм и пароль.'
-    USERNAME_TAKEN = 'Юзернейм уже занят!'
-    REGISTRATION_SUCCESS = 'Успешная регистрация.'

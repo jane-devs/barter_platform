@@ -4,6 +4,11 @@ from rest_framework import serializers
 from ads.models import Ad, ExchangeProposal
 
 
+class EmptySerializer(serializers.Serializer):
+    """Сериализатор-заглушка без входных данных для документации."""
+    pass
+
+
 class UserShortSerializer(serializers.ModelSerializer):
     """
     Вложенный сериализатор для Ad для отображения
@@ -49,13 +54,12 @@ class ExchangeProposalSerializer(serializers.ModelSerializer):
     Сериализатор для модели ExchangeProposal.
     Представляет предложения на обмен между пользователями.
     """
-    user = UserShortSerializer(read_only=True)
 
     class Meta:
         model = ExchangeProposal
         fields = [
             'id', 'ad_sender', 'ad_receiver',
-            'status', 'created_at', 'user'
+            'status', 'created_at'
         ]
 
 

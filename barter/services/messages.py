@@ -1,13 +1,17 @@
+from constants import Message, Errors, ConstStr
+
+
 def get_proposal_action_message(code: str, action: str = None) -> str:
+    """Обработка ответа на предложение."""
     action_labels = {
-        'accept': 'приняли',
-        'reject': 'отклонили',
+        'accept': ConstStr.ACCEPTED_RU,
+        'reject': ConstStr.REJECTED_RU,
     }
     messages = {
-        'success': f'Вы успешно {action_labels.get(action, "обработали")} '
-                   f'предложение.',
-        'already_handled': 'Предложение уже обработано.',
-        'forbidden': 'Вы не можете обработать это предложение.',
-        'invalid_action': 'Недопустимое действие.',
+        'success': Message.GET_PROPOSAL.format(
+            get_action=action_labels.get(action, ConstStr.PROCESSED)),
+        'already_handled': Message.PROPOSAL_ALREADY,
+        'forbidden': Errors.ERROR_PROPOSAL,
+        'invalid_action': Message.UNKNOWN_ACTION,
     }
-    return messages.get(code, 'Неизвестный результат.')
+    return messages.get(code, Errors.UNKNOWN_RESULT)

@@ -1,30 +1,60 @@
 from django.core.exceptions import PermissionDenied
-from ads.models import ExchangeProposal, StatusChoices
 from django.db import transaction
+
+from ads.models import ExchangeProposal, StatusChoices
+from constants import Message, Errors
+from .messages import get_proposal_action_message
 
 
 class ProposalAlreadyHandledError(Exception):
+    """Кастомное исключение для предложений обмена."""
     pass
 
 
 @transaction.atomic
 def handle_proposal_action(proposal: ExchangeProposal, action: str, user):
+    """Бизнес-логика предложений обмена."""
     if proposal.status != StatusChoices.PENDING:
-        raise ProposalAlreadyHandledError("Proposal already handled.")
-
+        raise ProposalAlreadyHandledError(Message.PROPOSAL_ALREADY)
     if proposal.ad_receiver.user != user:
-        raise PermissionDenied("You are not allowed to handle this proposal.")
-
+        raise PermissionDenied(Errors.ERROR_PROPOSAL)
     if action == 'accept':
         proposal.status = StatusChoices.ACCEPTED
         proposal.ad_sender.is_exchanged = True
         proposal.ad_receiver.is_exchanged = True
         proposal.ad_sender.save()
         proposal.ad_receiver.save()
-
     elif action == 'reject':
         proposal.status = StatusChoices.REJECTED
     else:
-        raise ValueError('Unknown action')
-
+        raise ValueError(Message.UNKNOWN_ACTION)
     proposal.save()
+
+
+def process_proposal_action(proposal, action, user):
+    """
+    Вызывает бизнес-логику обработки предложения,
+    возвращает dict с результатом и сообщением.
+    """
+    try:
+        handle_proposal_action(proposal, action, user)
+    except ProposalAlreadyHandledError:
+        return {
+            'error': True,
+            'message': get_proposal_action_message('already_handled')
+        }
+    except PermissionDenied:
+        return {
+            'error': True,
+            'message': get_proposal_action_message('forbidden')
+        }
+    except ValueError:
+        return {
+            'error': True,
+            'message': get_proposal_action_message('invalid_action')
+        }
+    else:
+        return {
+            'error': False,
+            'message': get_proposal_action_message('success', action)
+        }

@@ -10,15 +10,12 @@ from django.views.generic import (
     CreateView, UpdateView, DeleteView, ListView, FormView, View,
     TemplateView
 )
-from rest_framework.exceptions import PermissionDenied
 
 from .models import Ad, ExchangeProposal
 from .forms import AdForm, ExchangeProposalForm
 from api.mixins import AdsFilterMixin, IsOwnerMixin
-from constants import ConstStr, ConstNum
-from services.proposal_service import (
-    handle_proposal_action, ProposalAlreadyHandledError
-)
+from constants import ConstStr, ConstNum, Message, Errors
+from services.proposal_service import process_proposal_action
 
 
 class AdListView(LoginRequiredMixin, AdsFilterMixin, ListView):
@@ -138,7 +135,7 @@ class ProposalCreateView(LoginRequiredMixin, FormView):
             Ad, pk=self.kwargs['ad_pk'], is_exchanged=False
         )
         if self.ad_receiver.user == request.user:
-            messages.error(request, ConstStr.ERROR_SELF_PROPOSAL)
+            messages.error(request, Errors.ERROR_SELF_PROPOSAL)
             return redirect('ad_list')
         return super().dispatch(request, *args, **kwargs)
 
@@ -158,7 +155,7 @@ class ProposalCreateView(LoginRequiredMixin, FormView):
         proposal.ad_receiver = self.ad_receiver
         proposal.status = ConstStr.PENDING
         proposal.save()
-        messages.success(self.request, ConstStr.SUCCESS_PROPOSAL_SENT)
+        messages.success(self.request, Message.SUCCESS_PROPOSAL_SENT)
         return super().form_valid(form)
 
 
@@ -210,27 +207,16 @@ class MyProposalsView(LoginRequiredMixin, TemplateView):
 
 
 class HandleProposalView(LoginRequiredMixin, View):
+    """Обработка ответа на предложения обмена."""
+
     def post(self, request, proposal_id: int, action: str):
         proposal = get_object_or_404(ExchangeProposal, pk=proposal_id)
-        try:
-            handle_proposal_action(proposal, action, request.user)
-        except ProposalAlreadyHandledError:
-            messages.error(request, 'Предложение уже обработано.')
-        except PermissionDenied:
-            messages.error(request, 'Вы не можете обработать это предложение.')
-        except ValueError:
-            messages.error(request, 'Недопустимое действие.')
+        result = process_proposal_action(proposal, action, request.user)
+        if result['error']:
+            messages.error(request, result['message'])
         else:
-            messages.success(
-                request, f'Вы {self._get_action_label(action)} предложение.')
-
+            messages.success(request, result['message'])
         return redirect('my_proposals')
-
-    def _get_action_label(self, action: str):
-        return {
-            'accept': 'приняли',
-            'reject': 'отклонили'
-        }.get(action, 'обработали')
 
 
 class RegisterView(FormView):

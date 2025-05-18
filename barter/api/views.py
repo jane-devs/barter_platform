@@ -12,20 +12,17 @@ from django.contrib.auth import login
 from rest_framework_simplejwt.views import (
     TokenObtainPairView, TokenRefreshView
 )
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import ValidationError
+from django.db.models import Q
 
 from ads.models import Ad, ExchangeProposal
 from .serializers import (
     AdSerializer, ExchangeProposalSerializer, UserSerializer,
-    AdCreateSerializer
+    AdCreateSerializer, EmptySerializer
 )
 from .mixins import AdsFilterMixin, IsOwnerPermission
-from constants import ConstStr
-from services.proposal_service import (
-    handle_proposal_action, ProposalAlreadyHandledError
-)
-from services.permissions import check_proposal_access
-from services.messages import get_proposal_action_message
+from constants import ConstStr, Errors, Message
+from services.proposal_service import process_proposal_action
 
 
 class AdViewSet(AdsFilterMixin, viewsets.ModelViewSet):
@@ -100,20 +97,19 @@ class ExchangeProposalViewSet(viewsets.ModelViewSet):
 
     serializer_class = ExchangeProposalSerializer
     permission_classes = [IsAuthenticated]
+    filterset_fields = ['status']
 
     def get_queryset(self):
         user = self.request.user
         return ExchangeProposal.objects.filter(
-            ad_sender__user=user
-        ) | ExchangeProposal.objects.filter(
-            ad_receiver__user=user
+            Q(ad_sender__user=user) | Q(ad_receiver__user=user)
         )
 
     def perform_create(self, serializer):
         ad_sender = serializer.validated_data.get('ad_sender')
         if ad_sender.user != self.request.user:
             raise serializers.ValidationError(
-                ConstStr.ONLY_YOUR_PROPOSAL
+                Errors.ONLY_YOUR_PROPOSAL
             )
         serializer.save()
 
@@ -132,38 +128,46 @@ class ExchangeProposalViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
 
-    @action(detail=True, methods=[ConstStr.POST])
+    @swagger_auto_schema(request_body=EmptySerializer)
+    @action(
+        detail=True,
+        methods=['post'],
+        serializer_class=EmptySerializer
+    )
     def accept(self, request, pk=None):
         """
         Принять предложение обмена.
 
         POST-запрос для принятия предложения обмена.
+        Тело запроса не передается (в документации отображается как {}).
+
+        Для принятия предложения просто укажите id предложения.
         """
         return self._handle_proposal_action(request, pk, 'accept')
 
-    @action(detail=True, methods=[ConstStr.POST])
+    @swagger_auto_schema(request_body=EmptySerializer)
+    @action(
+        detail=True,
+        methods=['post'],
+        serializer_class=EmptySerializer
+    )
     def reject(self, request, pk=None):
         """
         Отклонить предложение обмена.
 
         POST-запрос для отказа на предложение обмена.
+        Тело запроса не передается (в документации отображается как {}).
+
+        Для отклонения предложения просто укажите id предложения.
         """
         return self._handle_proposal_action(request, pk, 'reject')
 
     def _handle_proposal_action(self, request, pk, action):
         proposal = self.get_object()
-        try:
-            check_proposal_access(proposal, request.user)
-            handle_proposal_action(proposal, action, request.user)
-        except ProposalAlreadyHandledError:
-            raise ValidationError(get_proposal_action_message('already_handled'))
-        except PermissionDenied:
-            raise PermissionDenied(get_proposal_action_message('forbidden'))
-        except ValueError:
-            raise ValidationError(get_proposal_action_message(
-                'invalid_action'))
-        return Response({"status": get_proposal_action_message(
-            'success', action)})
+        result = process_proposal_action(proposal, action, request.user)
+        if result['error']:
+            raise ValidationError(result['message'])
+        return Response({'status': result['message']})
 
 
 class UserViewSet(viewsets.ViewSet):
@@ -208,16 +212,16 @@ class UserViewSet(viewsets.ViewSet):
         password = request.data.get('password')
         if not username or not password:
             return Response(
-                {'detail': ConstStr.REG_DATA_REQUIRED},
+                {'detail': Message.REG_DATA_REQUIRED},
                 status=status.HTTP_400_BAD_REQUEST)
         if User.objects.filter(username=username).exists():
             return Response(
-                {'detail': ConstStr.USERNAME_TAKEN},
+                {'detail': Errors.USERNAME_TAKEN},
                 status=status.HTTP_400_BAD_REQUEST)
         user = User.objects.create_user(username=username, password=password)
         login(request, user)
         return Response(
-            {'detail': ConstStr.REGISTRATION_SUCCESS},
+            {'detail': Message.REGISTRATION_SUCCESS},
             status=status.HTTP_201_CREATED)
 
 
