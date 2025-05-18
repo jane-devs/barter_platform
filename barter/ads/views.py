@@ -2,7 +2,6 @@ from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect
 from django.core.paginator import Paginator
 from django.utils.http import urlencode
@@ -11,11 +10,15 @@ from django.views.generic import (
     CreateView, UpdateView, DeleteView, ListView, FormView, View,
     TemplateView
 )
+from rest_framework.exceptions import PermissionDenied
 
 from .models import Ad, ExchangeProposal
 from .forms import AdForm, ExchangeProposalForm
 from api.mixins import AdsFilterMixin, IsOwnerMixin
-from constants import ConstStr, Message, ConstNum
+from constants import ConstStr, ConstNum
+from services.proposal_service import (
+    handle_proposal_action, ProposalAlreadyHandledError
+)
 
 
 class AdListView(LoginRequiredMixin, AdsFilterMixin, ListView):
@@ -207,31 +210,27 @@ class MyProposalsView(LoginRequiredMixin, TemplateView):
 
 
 class HandleProposalView(LoginRequiredMixin, View):
-    """Обработка ответа на предложения обмена."""
-
-    def post(self, request, proposal_id, action):
-        proposal = get_object_or_404(
-            ExchangeProposal,
-            pk=proposal_id,
-            ad_receiver__user=request.user
-        )
-        if proposal.status != ConstStr.PENDING:
-            messages.info(request, Message.PROPOSAL_ALREADY)
-            return redirect('my_proposals')
-        if action == 'accept':
-            proposal.status = ConstStr.ACCEPTED
-            proposal.ad_sender.is_exchanged = True
-            proposal.ad_receiver.is_exchanged = True
-            proposal.ad_sender.save()
-            proposal.ad_receiver.save()
-            messages.success(request, Message.PROPOSAL_ACCEPT)
-        elif action == 'reject':
-            proposal.status = ConstStr.REJECTED
-            messages.success(request, Message.PROPOSAL_REJECT)
+    def post(self, request, proposal_id: int, action: str):
+        proposal = get_object_or_404(ExchangeProposal, pk=proposal_id)
+        try:
+            handle_proposal_action(proposal, action, request.user)
+        except ProposalAlreadyHandledError:
+            messages.error(request, 'Предложение уже обработано.')
+        except PermissionDenied:
+            messages.error(request, 'Вы не можете обработать это предложение.')
+        except ValueError:
+            messages.error(request, 'Недопустимое действие.')
         else:
-            return HttpResponseBadRequest(ConstStr.WRONG_ACTION)
-        proposal.save()
+            messages.success(
+                request, f'Вы {self._get_action_label(action)} предложение.')
+
         return redirect('my_proposals')
+
+    def _get_action_label(self, action: str):
+        return {
+            'accept': 'приняли',
+            'reject': 'отклонили'
+        }.get(action, 'обработали')
 
 
 class RegisterView(FormView):

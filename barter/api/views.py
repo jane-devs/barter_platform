@@ -12,6 +12,7 @@ from django.contrib.auth import login
 from rest_framework_simplejwt.views import (
     TokenObtainPairView, TokenRefreshView
 )
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from ads.models import Ad, ExchangeProposal
 from .serializers import (
@@ -19,7 +20,12 @@ from .serializers import (
     AdCreateSerializer
 )
 from .mixins import AdsFilterMixin, IsOwnerPermission
-from constants import Message, Errors, ConstStr
+from constants import ConstStr
+from services.proposal_service import (
+    handle_proposal_action, ProposalAlreadyHandledError
+)
+from services.permissions import check_proposal_access
+from services.messages import get_proposal_action_message
 
 
 class AdViewSet(AdsFilterMixin, viewsets.ModelViewSet):
@@ -133,27 +139,7 @@ class ExchangeProposalViewSet(viewsets.ModelViewSet):
 
         POST-запрос для принятия предложения обмена.
         """
-        proposal = self.get_object()
-
-        if proposal.status != ConstStr.PENDING:
-            return Response(
-                {ConstStr.DETAIL: Message.PROPOSAL_ALREADY},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if proposal.ad_receiver.user != request.user:
-            return Response(
-                {ConstStr.DETAIL: Errors.NO_PERMISSION},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        proposal.status = ConstStr.ACCEPTED
-        proposal.ad_sender.is_exchanged = True
-        proposal.ad_receiver.is_exchanged = True
-        proposal.ad_sender.save()
-        proposal.ad_receiver.save()
-        proposal.save()
-        return Response({ConstStr.DETAIL: Message.PROPOSAL_ACCEPT})
+        return self._handle_proposal_action(request, pk, 'accept')
 
     @action(detail=True, methods=[ConstStr.POST])
     def reject(self, request, pk=None):
@@ -162,22 +148,22 @@ class ExchangeProposalViewSet(viewsets.ModelViewSet):
 
         POST-запрос для отказа на предложение обмена.
         """
+        return self._handle_proposal_action(request, pk, 'reject')
+
+    def _handle_proposal_action(self, request, pk, action):
         proposal = self.get_object()
-
-        if proposal.status != ConstStr.PENDING:
-            return Response(
-                {ConstStr.DETAIL: Message.PROPOSAL_ALREADY},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if proposal.ad_receiver.user != request.user:
-            return Response(
-                {ConstStr.DETAIL: Errors.NO_PERMISSION},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        proposal.status = ConstStr.REJECTED
-        proposal.save()
-        return Response({ConstStr.DETAIL: Message.PROPOSAL_REJECT})
+        try:
+            check_proposal_access(proposal, request.user)
+            handle_proposal_action(proposal, action, request.user)
+        except ProposalAlreadyHandledError:
+            raise ValidationError(get_proposal_action_message('already_handled'))
+        except PermissionDenied:
+            raise PermissionDenied(get_proposal_action_message('forbidden'))
+        except ValueError:
+            raise ValidationError(get_proposal_action_message(
+                'invalid_action'))
+        return Response({"status": get_proposal_action_message(
+            'success', action)})
 
 
 class UserViewSet(viewsets.ViewSet):
