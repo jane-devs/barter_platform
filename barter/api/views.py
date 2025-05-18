@@ -97,7 +97,12 @@ class ExchangeProposalViewSet(viewsets.ModelViewSet):
 
     serializer_class = ExchangeProposalSerializer
     permission_classes = [IsAuthenticated]
-    filterset_fields = ['status']
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = [
+        'status',
+        'ad_sender__user__username',
+        'ad_receiver__user__username'
+    ]
 
     def get_queryset(self):
         user = self.request.user
@@ -119,10 +124,23 @@ class ExchangeProposalViewSet(viewsets.ModelViewSet):
                 name='status',
                 in_=openapi.IN_QUERY,
                 description=(
-                   'Фильтрация по статусу предложения.'
+                    'Фильтрация по статусу предложения: '
+                    '(pending, accepted, rejected)'
                 ),
                 type=openapi.TYPE_STRING
-            )
+            ),
+            openapi.Parameter(
+                name='ad_sender',
+                in_=openapi.IN_QUERY,
+                description='Фильтрация: имя пользователя отправителя',
+                type=openapi.TYPE_STRING
+            ),
+            openapi.Parameter(
+                name='ad_receiver',
+                in_=openapi.IN_QUERY,
+                description='Фильтрация: имя пользователя получателя',
+                type=openapi.TYPE_STRING
+            ),
         ]
     )
     def list(self, request, *args, **kwargs):

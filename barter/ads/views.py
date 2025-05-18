@@ -162,7 +162,7 @@ class ProposalCreateView(LoginRequiredMixin, FormView):
 class MyProposalsView(LoginRequiredMixin, TemplateView):
     """
     Отображение предложений, отправленных
-    и полученных текущим пользователем.
+    и полученных текущим пользователем, с фильтрацией.
     """
 
     template_name = 'ads/my_proposals.html'
@@ -176,6 +176,8 @@ class MyProposalsView(LoginRequiredMixin, TemplateView):
         received_proposals = ExchangeProposal.objects.filter(
             ad_receiver__in=user_ads)
         status_filter = self.request.GET.get('status')
+        sender_filter = self.request.GET.get('sender', '').strip()
+        receiver_filter = self.request.GET.get('receiver', '').strip()
         if status_filter in [
             ConstStr.PENDING,
             ConstStr.ACCEPTED,
@@ -185,6 +187,14 @@ class MyProposalsView(LoginRequiredMixin, TemplateView):
                 status=status_filter)
             received_proposals = received_proposals.filter(
                 status=status_filter)
+        if sender_filter:
+            received_proposals = received_proposals.filter(
+                ad_sender__user__username__icontains=sender_filter
+            )
+        if receiver_filter:
+            sent_proposals = sent_proposals.filter(
+                ad_receiver__user__username__icontains=receiver_filter
+            )
         sent_page_number = self.request.GET.get('sent_page')
         sent_paginator = Paginator(sent_proposals, 5)
         sent_page_obj = sent_paginator.get_page(sent_page_number)
@@ -194,6 +204,10 @@ class MyProposalsView(LoginRequiredMixin, TemplateView):
         base_query = {}
         if status_filter:
             base_query['status'] = status_filter
+        if sender_filter:
+            base_query['sender'] = sender_filter
+        if receiver_filter:
+            base_query['receiver'] = receiver_filter
         query_string = urlencode(base_query)
         context.update({
             'sent_page_obj': sent_page_obj,
@@ -201,6 +215,8 @@ class MyProposalsView(LoginRequiredMixin, TemplateView):
             'sent_proposals': sent_page_obj.object_list,
             'received_proposals': received_page_obj.object_list,
             'status_filter': status_filter,
+            'sender_filter': sender_filter,
+            'receiver_filter': receiver_filter,
             'query_string': query_string,
         })
         return context
