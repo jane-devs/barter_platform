@@ -1,8 +1,9 @@
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 
-from ads.models import ExchangeProposal, StatusChoices
-from constants import Message, Errors
+from ads.models import ExchangeProposal, StatusChoices, Ad
+from constants import Message, Errors, ConstStr
 from .messages import get_proposal_action_message
 
 
@@ -58,3 +59,24 @@ def process_proposal_action(proposal, action, user):
             'error': False,
             'message': get_proposal_action_message('success', action)
         }
+
+
+class ProposalCreationError(Exception):
+    """Кастомное исключение создания предложения обмена."""
+    pass
+
+
+def create_exchange_proposal(user, ad_receiver_id, ad_sender):
+    """Сервисная функция для создания предложения обмена."""
+    ad_receiver = get_object_or_404(Ad, pk=ad_receiver_id, is_exchanged=False)
+
+    if ad_receiver.user == user:
+        raise ProposalCreationError(Errors.ERROR_SELF_PROPOSAL)
+
+    proposal = ExchangeProposal(
+        ad_receiver=ad_receiver,
+        ad_sender=ad_sender,
+        status=ConstStr.PENDING
+    )
+    proposal.save()
+    return proposal
