@@ -1,6 +1,6 @@
 from django.db.models import Q
 
-from .models import ExchangeProposal
+from ads.models import ExchangeProposal
 from constants import ConstStr
 
 

@@ -12,14 +12,17 @@ from django.contrib.auth import login
 from rest_framework_simplejwt.views import (
     TokenObtainPairView, TokenRefreshView
 )
+from rest_framework.exceptions import ValidationError
+from django.db.models import Q
 
 from ads.models import Ad, ExchangeProposal
 from .serializers import (
     AdSerializer, ExchangeProposalSerializer, UserSerializer,
-    AdCreateSerializer
+    AdCreateSerializer, EmptySerializer
 )
 from .mixins import AdsFilterMixin, IsOwnerPermission
-from constants import Message, Errors, ConstStr
+from constants import ConstStr, Errors, Message
+from services.proposal_service import process_proposal_action
 
 
 class AdViewSet(AdsFilterMixin, viewsets.ModelViewSet):
@@ -94,20 +97,24 @@ class ExchangeProposalViewSet(viewsets.ModelViewSet):
 
     serializer_class = ExchangeProposalSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = [
+        'status',
+        'ad_sender__user__username',
+        'ad_receiver__user__username'
+    ]
 
     def get_queryset(self):
         user = self.request.user
         return ExchangeProposal.objects.filter(
-            ad_sender__user=user
-        ) | ExchangeProposal.objects.filter(
-            ad_receiver__user=user
+            Q(ad_sender__user=user) | Q(ad_receiver__user=user)
         )
 
     def perform_create(self, serializer):
         ad_sender = serializer.validated_data.get('ad_sender')
         if ad_sender.user != self.request.user:
             raise serializers.ValidationError(
-                ConstStr.ONLY_YOUR_PROPOSAL
+                Errors.ONLY_YOUR_PROPOSAL
             )
         serializer.save()
 
@@ -117,67 +124,68 @@ class ExchangeProposalViewSet(viewsets.ModelViewSet):
                 name='status',
                 in_=openapi.IN_QUERY,
                 description=(
-                   'Фильтрация по статусу предложения.'
+                    'Фильтрация по статусу предложения: '
+                    '(pending, accepted, rejected)'
                 ),
                 type=openapi.TYPE_STRING
-            )
+            ),
+            openapi.Parameter(
+                name='ad_sender',
+                in_=openapi.IN_QUERY,
+                description='Фильтрация: имя пользователя отправителя',
+                type=openapi.TYPE_STRING
+            ),
+            openapi.Parameter(
+                name='ad_receiver',
+                in_=openapi.IN_QUERY,
+                description='Фильтрация: имя пользователя получателя',
+                type=openapi.TYPE_STRING
+            ),
         ]
     )
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
 
-    @action(detail=True, methods=[ConstStr.POST])
+    @swagger_auto_schema(request_body=EmptySerializer)
+    @action(
+        detail=True,
+        methods=['post'],
+        serializer_class=EmptySerializer
+    )
     def accept(self, request, pk=None):
         """
         Принять предложение обмена.
 
         POST-запрос для принятия предложения обмена.
+        Тело запроса не передается (в документации отображается как {}).
+
+        Для принятия предложения просто укажите id предложения.
         """
-        proposal = self.get_object()
+        return self._handle_proposal_action(request, pk, 'accept')
 
-        if proposal.status != ConstStr.PENDING:
-            return Response(
-                {ConstStr.DETAIL: Message.PROPOSAL_ALREADY},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if proposal.ad_receiver.user != request.user:
-            return Response(
-                {ConstStr.DETAIL: Errors.NO_PERMISSION},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        proposal.status = ConstStr.ACCEPTED
-        proposal.ad_sender.is_exchanged = True
-        proposal.ad_receiver.is_exchanged = True
-        proposal.ad_sender.save()
-        proposal.ad_receiver.save()
-        proposal.save()
-        return Response({ConstStr.DETAIL: Message.PROPOSAL_ACCEPT})
-
-    @action(detail=True, methods=[ConstStr.POST])
+    @swagger_auto_schema(request_body=EmptySerializer)
+    @action(
+        detail=True,
+        methods=['post'],
+        serializer_class=EmptySerializer
+    )
     def reject(self, request, pk=None):
         """
         Отклонить предложение обмена.
 
         POST-запрос для отказа на предложение обмена.
+        Тело запроса не передается (в документации отображается как {}).
+
+        Для отклонения предложения просто укажите id предложения.
         """
+        return self._handle_proposal_action(request, pk, 'reject')
+
+    def _handle_proposal_action(self, request, pk, action):
         proposal = self.get_object()
-
-        if proposal.status != ConstStr.PENDING:
-            return Response(
-                {ConstStr.DETAIL: Message.PROPOSAL_ALREADY},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if proposal.ad_receiver.user != request.user:
-            return Response(
-                {ConstStr.DETAIL: Errors.NO_PERMISSION},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        proposal.status = ConstStr.REJECTED
-        proposal.save()
-        return Response({ConstStr.DETAIL: Message.PROPOSAL_REJECT})
+        result = process_proposal_action(proposal, action, request.user)
+        if result['error']:
+            raise ValidationError(result['message'])
+        return Response({'status': result['message']})
 
 
 class UserViewSet(viewsets.ViewSet):
@@ -222,16 +230,16 @@ class UserViewSet(viewsets.ViewSet):
         password = request.data.get('password')
         if not username or not password:
             return Response(
-                {'detail': ConstStr.REG_DATA_REQUIRED},
+                {'detail': Message.REG_DATA_REQUIRED},
                 status=status.HTTP_400_BAD_REQUEST)
         if User.objects.filter(username=username).exists():
             return Response(
-                {'detail': ConstStr.USERNAME_TAKEN},
+                {'detail': Errors.USERNAME_TAKEN},
                 status=status.HTTP_400_BAD_REQUEST)
         user = User.objects.create_user(username=username, password=password)
         login(request, user)
         return Response(
-            {'detail': ConstStr.REGISTRATION_SUCCESS},
+            {'detail': Message.REGISTRATION_SUCCESS},
             status=status.HTTP_201_CREATED)
 
 

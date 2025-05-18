@@ -2,7 +2,6 @@ from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect
 from django.core.paginator import Paginator
 from django.utils.http import urlencode
@@ -15,7 +14,8 @@ from django.views.generic import (
 from .models import Ad, ExchangeProposal
 from .forms import AdForm, ExchangeProposalForm
 from api.mixins import AdsFilterMixin, IsOwnerMixin
-from constants import ConstStr, Message, ConstNum
+from constants import ConstStr, ConstNum, Message, Errors
+from services.proposal_service import process_proposal_action
 
 
 class AdListView(LoginRequiredMixin, AdsFilterMixin, ListView):
@@ -135,7 +135,7 @@ class ProposalCreateView(LoginRequiredMixin, FormView):
             Ad, pk=self.kwargs['ad_pk'], is_exchanged=False
         )
         if self.ad_receiver.user == request.user:
-            messages.error(request, ConstStr.ERROR_SELF_PROPOSAL)
+            messages.error(request, Errors.ERROR_SELF_PROPOSAL)
             return redirect('ad_list')
         return super().dispatch(request, *args, **kwargs)
 
@@ -155,14 +155,14 @@ class ProposalCreateView(LoginRequiredMixin, FormView):
         proposal.ad_receiver = self.ad_receiver
         proposal.status = ConstStr.PENDING
         proposal.save()
-        messages.success(self.request, ConstStr.SUCCESS_PROPOSAL_SENT)
+        messages.success(self.request, Message.SUCCESS_PROPOSAL_SENT)
         return super().form_valid(form)
 
 
 class MyProposalsView(LoginRequiredMixin, TemplateView):
     """
     Отображение предложений, отправленных
-    и полученных текущим пользователем.
+    и полученных текущим пользователем, с фильтрацией.
     """
 
     template_name = 'ads/my_proposals.html'
@@ -176,6 +176,8 @@ class MyProposalsView(LoginRequiredMixin, TemplateView):
         received_proposals = ExchangeProposal.objects.filter(
             ad_receiver__in=user_ads)
         status_filter = self.request.GET.get('status')
+        sender_filter = self.request.GET.get('sender', '').strip()
+        receiver_filter = self.request.GET.get('receiver', '').strip()
         if status_filter in [
             ConstStr.PENDING,
             ConstStr.ACCEPTED,
@@ -185,6 +187,14 @@ class MyProposalsView(LoginRequiredMixin, TemplateView):
                 status=status_filter)
             received_proposals = received_proposals.filter(
                 status=status_filter)
+        if sender_filter:
+            received_proposals = received_proposals.filter(
+                ad_sender__user__username__icontains=sender_filter
+            )
+        if receiver_filter:
+            sent_proposals = sent_proposals.filter(
+                ad_receiver__user__username__icontains=receiver_filter
+            )
         sent_page_number = self.request.GET.get('sent_page')
         sent_paginator = Paginator(sent_proposals, 5)
         sent_page_obj = sent_paginator.get_page(sent_page_number)
@@ -194,6 +204,10 @@ class MyProposalsView(LoginRequiredMixin, TemplateView):
         base_query = {}
         if status_filter:
             base_query['status'] = status_filter
+        if sender_filter:
+            base_query['sender'] = sender_filter
+        if receiver_filter:
+            base_query['receiver'] = receiver_filter
         query_string = urlencode(base_query)
         context.update({
             'sent_page_obj': sent_page_obj,
@@ -201,6 +215,8 @@ class MyProposalsView(LoginRequiredMixin, TemplateView):
             'sent_proposals': sent_page_obj.object_list,
             'received_proposals': received_page_obj.object_list,
             'status_filter': status_filter,
+            'sender_filter': sender_filter,
+            'receiver_filter': receiver_filter,
             'query_string': query_string,
         })
         return context
@@ -209,28 +225,13 @@ class MyProposalsView(LoginRequiredMixin, TemplateView):
 class HandleProposalView(LoginRequiredMixin, View):
     """Обработка ответа на предложения обмена."""
 
-    def post(self, request, proposal_id, action):
-        proposal = get_object_or_404(
-            ExchangeProposal,
-            pk=proposal_id,
-            ad_receiver__user=request.user
-        )
-        if proposal.status != ConstStr.PENDING:
-            messages.info(request, Message.PROPOSAL_ALREADY)
-            return redirect('my_proposals')
-        if action == 'accept':
-            proposal.status = ConstStr.ACCEPTED
-            proposal.ad_sender.is_exchanged = True
-            proposal.ad_receiver.is_exchanged = True
-            proposal.ad_sender.save()
-            proposal.ad_receiver.save()
-            messages.success(request, Message.PROPOSAL_ACCEPT)
-        elif action == 'reject':
-            proposal.status = ConstStr.REJECTED
-            messages.success(request, Message.PROPOSAL_REJECT)
+    def post(self, request, proposal_id: int, action: str):
+        proposal = get_object_or_404(ExchangeProposal, pk=proposal_id)
+        result = process_proposal_action(proposal, action, request.user)
+        if result['error']:
+            messages.error(request, result['message'])
         else:
-            return HttpResponseBadRequest(ConstStr.WRONG_ACTION)
-        proposal.save()
+            messages.success(request, result['message'])
         return redirect('my_proposals')
 
 

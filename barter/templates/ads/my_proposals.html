@@ -1,17 +1,27 @@
 {% extends 'base.html' %}
+{% block title %}Мои обмены{% endblock %}
 {% block content %}
 <h2 class="mb-4">Мои обмены</h2>
 
 <form method="get" class="row g-3 mb-4">
   <div class="col-md-3">
-    <select name="status" class="form-select">
+    <label for="status" class="form-label">Статус</label>
+    <select name="status" id="status" class="form-select">
       <option value="">Все статусы</option>
-      <option value="pending" {% if request.GET.status == 'pending' %}selected{% endif %}>Ожидает</option>
-      <option value="accepted" {% if request.GET.status == 'accepted' %}selected{% endif %}>Принято</option>
-      <option value="rejected" {% if request.GET.status == 'rejected' %}selected{% endif %}>Отклонено</option>
+      <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Ожидает</option>
+      <option value="accepted" {% if status_filter == 'accepted' %}selected{% endif %}>Принято</option>
+      <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Отклонено</option>
     </select>
   </div>
-  <div class="col-md-3 d-flex">
+  <div class="col-md-3">
+    <label for="sender" class="form-label">Имя отправителя</label>
+    <input type="text" name="sender" id="sender" class="form-control" placeholder="Фильтр по отправителю" value="{{ sender_filter }}">
+  </div>
+  <div class="col-md-3">
+    <label for="receiver" class="form-label">Имя получателя</label>
+    <input type="text" name="receiver" id="receiver" class="form-control" placeholder="Фильтр по получателю" value="{{ receiver_filter }}">
+  </div>
+  <div class="col-md-3 d-flex align-items-end">
     <button type="submit" class="btn btn-primary me-2">Применить фильтр</button>
     <a href="{% url 'my_proposals' %}" class="btn btn-outline-secondary">Сбросить</a>
   </div>
@@ -22,8 +32,10 @@
   {% for prop in sent_proposals %}
     <li class="list-group-item d-flex justify-content-between align-items-center">
       <div>
-        <strong>Ваше объявление:</strong> {{ prop.ad_sender.title }} →
-        <strong>Объявление:</strong> {{ prop.ad_receiver.title }}
+        <strong>Отправитель:</strong> {{ prop.ad_sender.user.username }}<br>
+        <strong>Получатель:</strong> {{ prop.ad_receiver.user.username }}<br>
+        <strong>Объявление:</strong> {{ prop.ad_sender.title }} → {{ prop.ad_receiver.title }}<br>
+        <strong>Дата:</strong> {{ prop.created_at|date:"Y-m-d H:i" }}
       </div>
       <span class="badge
         {% if prop.status == 'pending' %}bg-warning text-dark
@@ -47,8 +59,10 @@
     <li class="list-group-item">
       <div class="d-flex justify-content-between align-items-center">
         <div>
-          <strong>Объявление:</strong> {{ prop.ad_sender.title }} →
-          <strong>Ваше объявление:</strong> {{ prop.ad_receiver.title }}
+          <strong>Отправитель:</strong> {{ prop.ad_sender.user.username }}<br>
+          <strong>Получатель:</strong> {{ prop.ad_receiver.user.username }}<br>
+          <strong>Объявление:</strong> {{ prop.ad_sender.title }} → {{ prop.ad_receiver.title }}<br>
+          <strong>Дата:</strong> {{ prop.created_at|date:"Y-m-d H:i" }}
         </div>
         <div>
           <span class="badge
